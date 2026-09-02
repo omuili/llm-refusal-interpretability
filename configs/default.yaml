@@ -1,0 +1,57 @@
+project:
+  name: llm-refusal-interpretability
+  seed: 42
+
+model:
+  id: Qwen/Qwen2.5-1.5B-Instruct
+  revision: main
+  trust_remote_code: false
+  attn_implementation: sdpa
+  dtype: bfloat16
+  max_input_length: 512
+  system_prompt: "You are a helpful assistant."
+
+dataset:
+  id: allenai/wildjailbreak
+  config: train
+  split: train
+  processed_dir: data/processed/interpretability
+  discovery_size: 800
+  validation_size: 400
+  test_size: 800
+  seed: 42
+
+activations:
+  directory: outputs/activations
+  batch_size: 8
+  storage_dtype: float16
+  include_embedding: false
+  position: last_prompt_token
+
+direction:
+  metric: auroc
+  random_null_directions: 100
+  bootstrap_samples: 1000
+
+probe:
+  max_iter: 2000
+  c: 1.0
+  shuffled_label_nulls: 25
+  bootstrap_samples: 1000
+
+causal:
+  examples_per_harmfulness_class: 100
+  max_new_tokens: 64
+  batch_size: 4
+  addition_alpha: 1.0
+  random_direction_nulls: 3
+  intervention_mode: center_projection
+  bootstrap_samples: 1000
+
+privacy:
+  save_raw_prompts: false
+  save_raw_generations: false
+  save_response_hashes: true
+
+results:
+  dir: results

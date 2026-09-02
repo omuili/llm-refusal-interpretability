@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this repository, please cite it."
+title: "LLM Refusal Interpretability"
+type: software
+authors:
+  - family-names: Muili
+    given-names: Olanrewaju
+year: 2026
+license: MIT
+repository-code: "https://github.com/omuili/llm-refusal-interpretability"

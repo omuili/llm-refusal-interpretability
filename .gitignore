@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Gated/raw data
+data/
+
+# Model weights and local artifacts
+outputs/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+
+# Raw generations or row-level text
+results/raw/
+results/*_generations.jsonl
+results/*_responses.jsonl
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/

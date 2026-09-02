@@ -1,0 +1,17 @@
+{
+  "cross_style_transfer": {
+    "adversarial_to_vanilla_test_auroc": 0.80975,
+    "vanilla_to_adversarial_test_auroc": 0.7170000000000001
+  },
+  "held_out_test_auroc": 0.8753124999999999,
+  "held_out_test_auroc_95ci": [
+    0.8509077971155016,
+    0.8983446971477528
+  ],
+  "interpretation": "This is a harmfulness-associated residual-stream direction. It should be called refusal-linked only if causal intervention changes refusal behavior on held-out prompts.",
+  "random_direction_empirical_p": 0.009900990099009901,
+  "random_direction_validation_mean_auroc": 0.50669525,
+  "selected_layer": 7,
+  "selection_metric": "validation AUROC",
+  "validation_auroc": 0.90115
+}

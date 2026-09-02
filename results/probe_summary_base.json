@@ -1,0 +1,12 @@
+{
+  "held_out_test_auroc": 0.9684125,
+  "held_out_test_auroc_95ci": [
+    0.9572534265703974,
+    0.9780580141758098
+  ],
+  "interpretation": "Probe accuracy is predictive evidence, not causal evidence. Causal intervention is evaluated separately.",
+  "selected_layer": 15,
+  "selection_metric": "validation AUROC",
+  "shuffled_label_empirical_p": 0.038461538461538464,
+  "shuffled_label_null_mean_auroc": 0.49892925
+}

@@ -1,0 +1,62 @@
+{
+  "dataset_id": "allenai/wildjailbreak",
+  "discovery": {
+    "harmfulness": {
+      "benign": 400,
+      "harmful": 400
+    },
+    "label_4way": {
+      "adversarial_benign": 200,
+      "adversarial_harmful": 200,
+      "vanilla_benign": 200,
+      "vanilla_harmful": 200
+    },
+    "rows": 800,
+    "style": {
+      "adversarial": 400,
+      "vanilla": 400
+    },
+    "unique_leakage_groups": 798,
+    "unique_source_ids": 798
+  },
+  "raw_rows_after_cleaning": 261538,
+  "seed": 42,
+  "test": {
+    "harmfulness": {
+      "benign": 400,
+      "harmful": 400
+    },
+    "label_4way": {
+      "adversarial_benign": 200,
+      "adversarial_harmful": 200,
+      "vanilla_benign": 200,
+      "vanilla_harmful": 200
+    },
+    "rows": 800,
+    "style": {
+      "adversarial": 400,
+      "vanilla": 400
+    },
+    "unique_leakage_groups": 783,
+    "unique_source_ids": 783
+  },
+  "validation": {
+    "harmfulness": {
+      "benign": 200,
+      "harmful": 200
+    },
+    "label_4way": {
+      "adversarial_benign": 100,
+      "adversarial_harmful": 100,
+      "vanilla_benign": 100,
+      "vanilla_harmful": 100
+    },
+    "rows": 400,
+    "style": {
+      "adversarial": 200,
+      "vanilla": 200
+    },
+    "unique_leakage_groups": 396,
+    "unique_source_ids": 396
+  }
+}
