@@ -69,17 +69,6 @@ The linear probe reached **0.9684 held-out AUROC**, while manipulating the simpl
 
 ![Direction versus random nulls](results/direction_null_base.png)
 
-## Why this is a mechanistic interpretability project
-
-A classifier trained on model activations can show that information is **decodable**, but decodability does not prove that the model actually **uses** that information to produce a refusal.
-
-This repository therefore separates three levels of evidence:
-
-1. **Representation:** does a residual-stream direction separate harmful from benign prompts?
-2. **Prediction:** can a linear probe decode harmfulness from held-out activations?
-3. **Causality:** does ablating or adding the selected direction change refusal behavior on held-out prompts?
-
-I do not call a direction a "refusal direction" merely because it separates harmful and benign examples. The code labels it a **harmfulness-associated direction** until causal intervention provides evidence that it is refusal-linked.
 
 ## Experimental design
 
