@@ -1,20 +1,18 @@
 # LLM Refusal Interpretability
 
-I built this repository to test whether safety-relevant behavior in an open language model can be localized to a low-dimensional direction in the residual stream, and whether manipulating that direction changes refusal behavior.
+I built this project to investigate how harmfulness is represented inside **Qwen2.5-1.5B-Instruct**, how strongly that information can be recovered from internal activations, whether the representation transfers across prompt styles, and whether manipulating the discovered representation changes refusal behavior.
 
-The project uses **Qwen2.5-1.5B-Instruct** and the gated **WildJailbreak** dataset. It combines representation analysis, linear probes, cross-style transfer, causal activation interventions, and explicit null controls.
+I used the gated **WildJailbreak** dataset and combined residual-stream activation analysis, mean-difference directions, linear probing, cross-style transfer, explicit null controls, bootstrap confidence intervals, and causal interventions.
 
-The central question is not simply:
+My central research question was:
 
-> Can hidden states predict whether a prompt is harmful?
-
-It is:
-
-> Is there a representation that is predictively associated with harmfulness, transfers across prompt styles, and is causally linked to refusal behavior rather than merely correlated with the labels?
+> **Does Qwen2.5-1.5B contain an internal representation of harmfulness that is not only decodable, but also causally involved in refusal behavior?**
 
 ## Results
 
-The experiment produced strong evidence that **harmfulness information is represented and linearly accessible inside Qwen2.5-1.5B**, but it did **not** provide convincing evidence that the selected harmfulness-associated direction causally controls refusal behavior.
+I found strong evidence that **harmfulness information is represented and linearly accessible inside Qwen2.5-1.5B**.
+
+I did **not** find convincing evidence that the specific harmfulness-associated mean-difference direction identified in the study causally controls refusal behavior.
 
 | Analysis | Result |
 |---|---:|
@@ -34,11 +32,11 @@ The experiment produced strong evidence that **harmfulness information is repres
 
 ### Representation versus causality
 
-The strongest simple harmful-minus-benign direction was found at **block 7**, while the strongest linear probe was selected at **block 15**.
+The strongest simple harmful-minus-benign direction appeared at **block 7**, while the strongest linear probe appeared at **block 15**.
 
-This distinction matters. A representation can contain information that a probe can decode without that particular linear feature being the mechanism the model uses to produce its behavior.
+This difference became one of the most interesting findings in the project. The block-7 mean-difference direction captured a strong harmfulness-associated axis, but block 15 contained even more linearly decodable harmfulness information.
 
-The causal intervention therefore tested the block-7 direction directly on held-out prompts.
+I then tested the block-7 direction causally on held-out prompts.
 
 | Causal measurement | Result |
 |---|---:|
@@ -53,36 +51,39 @@ The causal intervention therefore tested the block-7 direction directly on held-
 
 ![Causal refusal intervention](results/causal_refusal_base.png)
 
-The ablation effect was not directionally consistent with the causal hypothesis, the addition effect was small, and both confidence intervals included zero.
+The ablation effect moved in the opposite direction from the simple causal hypothesis, the addition effect was small, and both confidence intervals included zero.
 
-I therefore **do not describe the discovered vector as a causal refusal direction**.
+I therefore do **not** describe the discovered vector as a causal refusal direction.
 
-The supported conclusion is narrower:
+The result I support is narrower:
 
-> Qwen2.5-1.5B contains a strong, partially cross-style, linearly accessible harmfulness representation, but the tested mean-difference direction does not show convincing causal control over refusal behavior.
+> **Qwen2.5-1.5B contains a strong, partially cross-style, linearly accessible harmfulness representation, but the tested mean-difference direction does not show convincing causal control over refusal behavior.**
 
 ### Main research lesson
 
 **Decodability is not causality.**
 
-The linear probe reached **0.9684 held-out AUROC**, while manipulating the simpler harmfulness-associated direction produced little measurable change in refusal. This illustrates why mechanistic interpretability should distinguish information that can be decoded from a representation from information that the model actually uses causally.
+The linear probe reached **0.9684 held-out AUROC**, while manipulating the simpler harmfulness-associated direction produced little measurable change in refusal behavior.
+
+That gap is the central interpretability finding of the study.
 
 ![Direction versus random nulls](results/direction_null_base.png)
 
-
-## Experimental design
+## Experimental Design
 
 ### Model
+
+I studied:
 
 ```text
 Qwen/Qwen2.5-1.5B-Instruct
 ```
 
-The default experiment operates on the base instruction model. The activation and causal-evaluation commands also support a PEFT adapter path, which allows the same analysis to be repeated on a fine-tuned model for before-versus-after comparison.
+The analysis covered residual-stream representations across all **28 transformer blocks**.
 
 ### Data
 
-The default controlled subset contains:
+I built a controlled WildJailbreak subset with three independent partitions:
 
 ```text
 discovery:   800 prompts
@@ -90,7 +91,7 @@ validation:  400 prompts
 test:        800 prompts
 ```
 
-Each split is balanced across the four WildJailbreak categories:
+Each partition was balanced across the four WildJailbreak categories:
 
 ```text
 adversarial_benign
@@ -99,170 +100,322 @@ vanilla_benign
 vanilla_harmful
 ```
 
-The three splits serve different purposes:
+The discovery partition contained:
 
-- **Discovery** estimates directions and trains probes.
-- **Validation** selects the transformer block and other analysis choices.
-- **Test** is held out until the analysis choices are fixed.
+```text
+800 total prompts
+400 harmful
+400 benign
+400 adversarial
+400 vanilla
+```
 
-This prevents choosing a layer because it happens to look best on the final evaluation examples.
+The held-out test partition used the same class balance.
 
-## Leakage control
+I used the three partitions for different purposes:
 
-WildJailbreak includes related source prompts and transformed adversarial variants. A naive random row split can therefore put semantically linked examples on both sides of the train-test boundary.
+- **Discovery** for constructing candidate harmfulness directions and training probes.
+- **Validation** for selecting transformer blocks and analysis choices.
+- **Test** only for final held-out evaluation after those choices were fixed.
 
-The data pipeline groups examples using:
+This prevented me from selecting a layer because it happened to perform best on the final evaluation examples.
+
+## Leakage Control
+
+WildJailbreak contains related source prompts and transformed adversarial variants, so a naive row-level random split could place semantically linked examples in multiple partitions.
+
+I grouped examples using:
 
 - a stable hash of the source vanilla prompt,
 - a stable hash of the normalized evaluated prompt,
 - connected leakage groups that merge source-related and exact-prompt-related examples.
 
-Groups are assigned to discovery, validation, or test as units. Balanced research subsets are sampled only after the group-level split is established.
+I assigned those groups to discovery, validation, or test as units and sampled the balanced research subsets only after the group-level split had been established.
 
-The gated dataset itself is never committed to this repository.
+The final preprocessing audit returned:
 
-## 1. Residual-stream activation extraction
+```text
+Leakage check: PASS
+```
 
-For every prompt, the model is run with hidden-state output enabled. The pipeline extracts the activation at the **last prompt token** from every transformer block.
+I did not redistribute the gated WildJailbreak rows in the repository.
 
-For a prompt \(x_i\), the extracted representation at layer \(\ell\) is conceptually:
+## Residual-Stream Activation Analysis
+
+I ran Qwen2.5-1.5B-Instruct with hidden-state output enabled and extracted the residual-stream activation at the **final prompt token** from every transformer block.
+
+For a prompt \(x_i\), the representation at layer \(\ell\) was:
 
 ```text
 h_i^(ell) = residual-stream activation at the final prompt position
 ```
 
-The repository stores these activations locally as compressed arrays. Raw prompt text is not copied into the activation files.
+For the discovery partition, the resulting activation tensor had shape:
 
-## 2. Mean-difference direction
+```text
+(800, 28, 1536)
+```
 
-At each transformer block, the discovery split is divided by ground-truth harmfulness.
+corresponding to:
 
-The direction is:
+```text
+800 prompts
+28 transformer blocks
+1536 hidden dimensions per block
+```
+
+I extracted separate activation tensors for discovery, validation, and held-out test examples.
+
+The activation tensors remained local experimental artifacts. Raw prompt text was not copied into the public activation outputs.
+
+## Mean-Difference Direction
+
+At each transformer block, I divided the discovery activations by ground-truth harmfulness and constructed a harmful-minus-benign mean-difference direction:
 
 ```text
 d_l = normalize(mean(harmful_l) - mean(benign_l))
 ```
 
-A held-out prompt is scored by projecting its activation onto this direction.
+I scored examples by projecting their activations onto each candidate direction.
 
-The validation split is used to choose the block with the strongest AUROC. Only after that choice is frozen is the selected direction evaluated on the test split.
-
-This matters because scanning every layer and reporting the best test layer would leak information from the test set into model selection.
-
-## 3. Random-direction null control
-
-A high AUROC is meaningful only relative to what arbitrary directions in a high-dimensional activation space can achieve.
-
-The pipeline samples random unit vectors at the selected block and compares their validation AUROCs with the observed direction.
-
-It reports:
-
-- the observed validation AUROC,
-- the random-direction AUROC distribution,
-- an empirical null p-value.
-
-This makes the directional-separation claim harder to obtain by chance.
-
-## 4. Linear probe
-
-The project also trains a regularized logistic-regression probe on each layer's activations.
-
-The probe answers a different question from the mean-difference direction:
-
-> How linearly decodable is harmfulness from the representation at this layer?
-
-The best probe layer is selected on validation data, then evaluated once on the held-out test set.
-
-### Shuffled-label null
-
-The probe is repeated with permuted discovery labels. If a real-label probe strongly outperforms shuffled-label probes, that provides a basic sanity check against pipeline or dimensionality artifacts.
-
-Probe performance is treated as **predictive evidence only**. It is not treated as evidence that the decoded feature causes the model's behavior.
-
-## 5. Cross-style transfer
-
-A safety-relevant representation is more interesting if it is not simply detecting the surface form of one prompt family.
-
-The pipeline therefore evaluates:
+I used **validation AUROC only** to select the block. The strongest direction occurred at **block 7**.
 
 ```text
-vanilla-derived direction      -> adversarial test prompts
-adversarial-derived direction  -> vanilla test prompts
+Validation AUROC:       0.9012
+Held-out test AUROC:    0.8753
+95% bootstrap CI:       [0.8509, 0.8983]
 ```
 
-This asks whether the harmfulness signal transfers when prompt style changes.
+The held-out performance remained strong even though the test examples were not used to construct the direction or select the layer.
 
-Poor cross-style transfer would suggest that the direction may partly encode style-specific artifacts rather than a more general harmfulness representation.
+## Random-Direction Null Control
 
-## 6. Causal intervention
+I compared the discovered harmfulness direction with randomly generated unit directions in the same representation space.
 
-The most important stage asks whether the selected direction actually influences refusal behavior.
+The random directions produced mean validation performance close to chance:
 
-The evaluator first measures baseline refusal rates on held-out prompts. It then performs two directional interventions at the selected transformer block.
+```text
+Random-direction mean AUROC: 0.5067
+```
+
+The discovered block-7 direction substantially exceeded that null distribution:
+
+```text
+Empirical p: 0.0099
+```
+
+This gave me evidence that the observed separation was not simply the result of projecting high-dimensional activations onto an arbitrary vector.
+
+## Linear Probe Analysis
+
+I separately trained regularized logistic-regression probes on each layer's residual-stream activations.
+
+The probe analysis measured how linearly accessible harmfulness information was at each layer without constraining the classifier to the simple class-mean direction.
+
+I selected the best probe layer using validation data only.
+
+The strongest probe appeared at **block 15**:
+
+```text
+Held-out test AUROC: 0.9684
+95% bootstrap CI:    [0.9573, 0.9781]
+```
+
+I also repeated the probe analysis with permuted discovery labels.
+
+The shuffled-label null remained close to chance:
+
+```text
+Mean shuffled-label AUROC: 0.4989
+Empirical p:               0.0385
+```
+
+This provided strong evidence that harmfulness information was linearly decodable from the model's internal representations.
+
+## Block 7 Versus Block 15
+
+The mean-difference analysis and the probe analysis selected different layers:
+
+```text
+Mean-difference direction: block 7
+Best linear probe:         block 15
+```
+
+I interpret these as measuring different aspects of the representation.
+
+The mean-difference method looks for a specific geometric axis connecting the average harmful and benign representations.
+
+The linear probe can learn a more flexible linear separating boundary.
+
+The result therefore suggests that harmfulness becomes highly linearly accessible deeper in the model even though the strongest simple class-mean direction appears earlier.
+
+## Cross-Style Transfer
+
+I tested whether the harmfulness signal generalized across prompt styles rather than simply reflecting the difference between vanilla and adversarial prompt forms.
+
+A direction estimated from vanilla prompts and evaluated on adversarial test prompts achieved:
+
+```text
+Vanilla → adversarial AUROC: 0.7170
+```
+
+A direction estimated from adversarial prompts and evaluated on vanilla test prompts achieved:
+
+```text
+Adversarial → vanilla AUROC: 0.8097
+```
+
+Both transfer results remained above chance.
+
+The drop relative to the overall held-out direction AUROC of **0.8753** suggests that the representation contains transferable harmfulness information while retaining some dependence on prompt style.
+
+## Causal Intervention
+
+The final analysis tested whether the selected block-7 direction actually influenced refusal behavior.
 
 ### Harmful-prompt ablation
 
-For harmful prompts, the code removes the prompt token's displacement along the selected direction by projecting it toward the discovery-set center.
+For held-out harmful prompts, I removed the prompt representation's displacement along the selected harmfulness direction by projecting it toward the discovery-set center.
 
-The question is:
+The measured refusal rates were:
 
-> Does reducing this component reduce refusal behavior?
+```text
+Baseline refusal rate:        41%
+Refusal rate after ablation:  43%
+Change:                       +2 percentage points
+95% CI:                       [-12, +16]
+```
+
+Under the simple causal hypothesis, removing the harmfulness-associated component should have reduced refusal.
+
+That did not happen.
+
+The observed effect was small, moved in the opposite direction, and had a confidence interval that included zero.
 
 ### Benign-prompt addition
 
-For benign prompts, the code adds the direction by an amount calibrated to the discovery-set harmful-versus-benign projection gap.
+For held-out benign prompts, I added the selected harmfulness direction by an amount calibrated to the discovery-set harmful-versus-benign projection gap.
 
-The question is:
+The measured refusal rates were:
 
-> Does increasing this component increase refusal behavior?
+```text
+Baseline refusal rate:        7%
+Refusal rate after addition:  8%
+Change:                       +1 percentage point
+95% CI:                       [-6, +9]
+```
 
-The intervention is applied to the current final token representation during forward passes, rather than indiscriminately rewriting every token in the sequence.
+The effect was directionally consistent with increased refusal but very small, and its confidence interval also included zero.
 
-## 7. Causal null controls
+### Matched causal nulls
 
-Directional interventions can perturb a model even when the chosen vector has no meaningful interpretation.
+I repeated matched interventions using random directions.
 
-The causal evaluator therefore repeats matched interventions with random directions and compares their changes in refusal rate with the selected direction's effect.
+The average random-direction effects were approximately zero:
 
-A convincing result should have all of the following:
+```text
+Random mean harmful-ablation delta: +0.0033
+Random mean benign-addition delta:  ~0.0000
+```
 
-- predictive separation on held-out activations,
-- strong performance relative to random directions,
-- cross-style transfer,
-- a linear probe that beats shuffled-label controls,
-- a directionally consistent causal effect,
-- a causal effect materially larger than random-direction interventions.
+The causal evidence therefore did not support the stronger claim that the block-7 mean-difference direction directly controls refusal behavior.
 
-If these conditions are not met, the result should be reported as weaker or mixed evidence.
+## Refusal Measurement
 
-## Refusal measurement
+For the causal analysis, I generated short deterministic continuations and measured refusal using a conservative refusal-pattern detector.
 
-The causal stage generates short deterministic continuations and applies a conservative refusal-pattern detector.
+I kept row-level non-text behavior metadata under the ignored local `outputs/behavior/` directory and published only aggregate refusal statistics and null-control summaries.
 
-The causal evaluator writes row-level non-text behavior metadata only to the ignored local `outputs/behavior/` directory. Public `results/` artifacts contain aggregate refusal statistics and null-control summaries.
+The causal evaluator recorded:
 
-**Raw model generations are not saved.**
+```text
+Raw generated text saved: NO
+```
 
-This design avoids publishing generated harmful continuations or row-level gated-dataset evaluation records while still preserving auditable aggregate behavior measurements.
+This kept raw harmful continuations and row-level gated-dataset evaluation records out of the public release.
 
-The heuristic refusal detector is also a limitation. A stronger follow-up would compare multiple refusal scorers or use a separately validated refusal classifier.
+I treat the heuristic refusal detector as a limitation of the current experiment rather than as a perfect behavioral oracle.
 
-## Privacy and responsible release
+## What I Conclude
 
-The repository intentionally excludes:
+The study supports four increasingly specific conclusions.
+
+### 1. Harmfulness information is internally represented
+
+A simple mean-difference direction separated harmful and benign prompts on held-out data:
+
+```text
+AUROC = 0.8753
+```
+
+### 2. Harmfulness is strongly linearly decodable
+
+A linear probe achieved:
+
+```text
+AUROC = 0.9684
+```
+
+on held-out activations.
+
+### 3. The representation partially transfers across prompting styles
+
+Cross-style transfer remained above chance:
+
+```text
+Vanilla → adversarial: 0.7170
+Adversarial → vanilla: 0.8097
+```
+
+### 4. The tested mean-difference direction does not show convincing causal control over refusal
+
+The causal interventions produced only small behavioral changes, and both confidence intervals included zero.
+
+My final conclusion is:
+
+> **Qwen2.5-1.5B contains a strong, partially cross-style, linearly accessible representation of harmfulness. However, the simple mean-difference direction identified in this study does not show convincing causal control over refusal behavior under the intervention tested here.**
+
+## Experimental Controls
+
+I used several controls to reduce the chance of interpreting artifacts as meaningful internal structure:
+
+```text
+leakage-controlled discovery, validation, and test partitions
+balanced harmful and benign examples
+balanced vanilla and adversarial examples
+validation-only layer selection
+held-out final evaluation
+bootstrap confidence intervals
+random-direction controls
+shuffled-label controls
+cross-style transfer tests
+matched random-direction causal interventions
+```
+
+The empirical null tests used finite numbers of randomizations, so I treat their p-values as coarse empirical estimates rather than highly precise significance measurements.
+
+## Privacy and Responsible Release
+
+I kept sensitive and heavyweight experimental artifacts outside the public repository.
+
+The public release excludes:
 
 ```text
 WildJailbreak raw rows
 raw prompts
 raw generated continuations
+activation tensors
+learned direction tensors
 model checkpoints
 adapter weights
-Hugging Face tokens
+Hugging Face credentials
 ```
 
-The `.gitignore` prevents the primary local data and output directories from being committed accidentally. Activation tensors, learned direction vectors, row-level behavior records, model generations, and adapters stay under ignored local paths.
+The `.gitignore` excludes the primary local data and output directories.
 
-## Repository structure
+I also included an automated pre-publication check that verifies that private paths, model artifacts, activation files, and Hugging Face credentials are not staged for release.
+
+## Repository Structure
 
 ```text
 configs/
@@ -286,114 +439,78 @@ src/
 
 scripts/
     run_pipeline.sh
+    pre_publish_check.sh
 
 tests/
 
 results/
     README.md
+    SUMMARY_base.md
+    direction_summary_base.json
+    probe_summary_base.json
+    causal_summary_base.json
+    direction_layers_base.csv
+    probe_layers_base.csv
+    direction_random_null_base.csv
+    probe_shuffled_null_base.csv
+    causal_random_null_base.csv
+    layer_auroc_base.png
+    direction_null_base.png
+    causal_refusal_base.png
 ```
 
-## Setup
+## Reproducibility Record
 
-Python 3.11 is recommended.
+I ran the experiment in Python 3.11 using the configuration recorded in:
+
+```text
+configs/default.yaml
+```
+
+The environment setup used:
 
 ```bash
-bash setup.sh
+PYTHON_BIN="$(uv python find 3.11)" bash setup.sh
 source .venv/bin/activate
 ```
 
-WildJailbreak is gated. Obtain access from its official Hugging Face page and authenticate locally before data preparation.
+I authenticated locally with Hugging Face because WildJailbreak is gated. No authentication token was committed to the repository.
 
-For example:
-
-```bash
-huggingface-cli login
-```
-
-No token should be committed to the repository.
-
-## Run the experiment
-
-### 1. Preflight
+The experiment sequence I ran was:
 
 ```bash
 python -m src.preflight --config configs/default.yaml
-```
 
-### 2. Build the leakage-safe controlled dataset
-
-```bash
 python -m src.prepare_data --config configs/default.yaml
-```
 
-### 3. Extract activations
-
-```bash
 python -m src.extract_activations --config configs/default.yaml --split discovery
 python -m src.extract_activations --config configs/default.yaml --split validation
 python -m src.extract_activations --config configs/default.yaml --split test
-```
 
-### 4. Discover and validate the direction
-
-```bash
 python -m src.discover_direction --config configs/default.yaml
-```
 
-### 5. Train the linear probe and shuffled-label nulls
-
-```bash
 python -m src.train_probe --config configs/default.yaml
-```
 
-### 6. Run held-out causal interventions
-
-```bash
 python -m src.causal_eval --config configs/default.yaml
-```
 
-### 7. Generate figures and a result summary
-
-```bash
 python -m src.report --config configs/default.yaml
 ```
 
-Or run the full sequence:
+The repository also records the complete sequence in:
 
-```bash
-bash scripts/run_pipeline.sh
+```text
+scripts/run_pipeline.sh
 ```
 
-## Optional: compare the base model with a fine-tuned adapter
+The pre-specified research design and interpretation criteria are documented in:
 
-One valuable extension is to ask whether safety fine-tuning changes where harmfulness information is represented or how causally important the direction becomes.
-
-Activation extraction supports a PEFT adapter:
-
-```bash
-python -m src.extract_activations \
-  --config configs/default.yaml \
-  --split discovery \
-  --adapter-path /path/to/final_adapter
+```text
+RESEARCH_PROTOCOL.md
 ```
 
-Repeat for validation and test, then run:
+## Generated Research Artifacts
 
-```bash
-python -m src.discover_direction --config configs/default.yaml --suffix adapter
-python -m src.train_probe --config configs/default.yaml --suffix adapter
-python -m src.causal_eval \
-  --config configs/default.yaml \
-  --suffix adapter \
-  --adapter-path /path/to/final_adapter
-python -m src.report --config configs/default.yaml --suffix adapter
-```
-
-This makes it possible to compare the base model with a QLoRA-adapted model without mixing the two analyses.
-
-## Generated research artifacts
-
-After a complete run, `results/` includes artifacts such as:
+The completed study produced the following public aggregate artifacts:
 
 ```text
 data_summary.json
@@ -415,64 +532,49 @@ causal_refusal_base.png
 SUMMARY_base.md
 ```
 
-The result summary is generated from measured outputs rather than hard-coded headline numbers.
-
-## What I would consider a defensible positive result
-
-I would not interpret one perfect-looking metric as proof of a refusal mechanism.
-
-A stronger claim would require converging evidence:
-
-1. a direction learned only from the discovery split,
-2. layer selection using validation data only,
-3. strong held-out test separation,
-4. performance above random-direction controls,
-5. cross-style transfer,
-6. probe performance above shuffled-label controls,
-7. held-out causal intervention effects,
-8. causal effects larger than random-direction effects.
-
-Even then, the claim should remain model- and dataset-specific unless replicated across seeds, models, and datasets.
-
-## Limitations
-
-- Ground-truth harmfulness and actual refusal behavior are different variables. The repository keeps them separate intentionally.
-- The mean-difference vector is a simple linear approximation to what may be a distributed nonlinear mechanism.
-- The refusal detector is heuristic and should be validated further before making strong behavioral claims.
-- The default experiment uses one model and one seed.
-- WildJailbreak may contain dataset-specific cues that do not transfer to other jailbreak distributions.
-- A causal effect at one layer does not prove that the model has a single unique refusal mechanism.
-- Activation interventions can create off-distribution hidden states, which is why matched random-direction controls are included.
-
-## Research extensions
-
-The repository is structured to support several stronger follow-ups:
-
-- repeat the full experiment across multiple random seeds,
-- compare Qwen with other open instruction models,
-- test transfer to a second jailbreak or safety dataset,
-- replace the heuristic refusal detector with an independently validated scorer,
-- compare base versus safety-fine-tuned representations,
-- test subspace methods instead of a single direction,
-- perform token-position and layer-specific causal sweeps,
-- measure whether the intervention changes unrelated capabilities,
-- test whether adversarial fine-tuning rotates, amplifies, or distributes the safety-relevant representation.
-
-## Why this project matters
-
-Mechanistic interpretability is most useful when it distinguishes **correlation, decodability, and causal involvement**.
-
-This project is designed around that distinction. Rather than stopping after finding a linearly separable direction, it asks whether the representation survives distributional changes in prompt style, whether it beats explicit null controls, and whether manipulating it changes model behavior.
-
-That makes the project useful not only as an interpretability exercise, but as a reproducible framework for testing claims about safety-relevant internal representations.
+The public summary was generated from the measured experiment outputs rather than from hard-coded headline values.
 
 ## Tests
 
-The unit tests cover data-label parsing, direction construction, intervention mathematics, refusal detection, and privacy-sensitive output schemas.
+I included unit tests covering data-label parsing, direction construction, intervention mathematics, refusal detection, privacy-sensitive output schemas, and utility functions.
 
-```bash
-pytest -q
+The final test run completed with:
+
+```text
+.......... [100%]
 ```
+
+The pre-publication check also passed its staged-file privacy scan, token scan, Python compilation check, and test suite.
+
+## Limitations
+
+I interpret the findings within the scope of this experiment rather than as a universal statement about refusal mechanisms.
+
+The main limitations are:
+
+- I studied one model, Qwen2.5-1.5B-Instruct.
+- I used one controlled WildJailbreak split and one project seed.
+- I analyzed the residual-stream representation at the final prompt token.
+- The mean-difference direction is a simple linear approximation to what may be a distributed nonlinear mechanism.
+- The causal experiment tested one intervention family.
+- The refusal detector is heuristic.
+- WildJailbreak may contain dataset-specific cues that do not transfer to other jailbreak distributions.
+- A probe can exploit information that may not itself be used by downstream model computation.
+- Failure of the tested intervention does not establish that harmfulness has no causal role elsewhere in the network.
+- Harmfulness may be represented through distributed, nonlinear, multi-layer, or circuit-level mechanisms that are not captured by a single residual-stream direction.
+- Activation interventions can create off-distribution hidden states, which is why I included matched random-direction controls.
+
+These limitations constrain the strength of the causal claim, but they do not undermine the central empirical result that harmfulness information is strongly and linearly accessible inside the model.
+
+## Research Takeaway
+
+The most important result from this study was not the highest AUROC.
+
+It was the difference between what I could **decode** and what I could **causally manipulate**.
+
+I could predict harmfulness from held-out internal activations with **0.9684 AUROC**, yet intervening on the strongest simple harmfulness-associated direction produced almost no measurable change in refusal behavior.
+
+That gap is the central interpretability finding of the project.
 
 ## License
 
